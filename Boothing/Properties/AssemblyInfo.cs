@@ -37,5 +37,5 @@ using Boothing;
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
 
-[assembly: MelonInfo(typeof(BoothingMod), "Boothing", "1.0.0", "Behemoth")]
+[assembly: MelonInfo(typeof(BoothingMod), "Boothing", "1.0.1", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
