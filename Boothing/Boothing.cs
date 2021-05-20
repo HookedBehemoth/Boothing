@@ -88,7 +88,7 @@ namespace Boothing {
         private static void SwitchToBoothCat(IntPtr @this, IntPtr prefab_ptr, IntPtr name_ptr, bool isSafe, float scale, IntPtr onSuccess_ptr, IntPtr onError_ptr) {
             var name = IL2CPP.Il2CppStringToManaged(name_ptr);
 
-            if (s_BoothCat != null && (name == "blocked" || name == "safety" || name == "performance")) {
+            if (s_BoothCat != null && (name == "error" || name == "safety" || name == "performance")) {
                 /* Replace robot with prefab boothcat */
                 prefab_ptr = s_BoothCat.Pointer;
             }
