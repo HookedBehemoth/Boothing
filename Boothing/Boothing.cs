@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright (c) 2021 HookedBehemoth
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -82,10 +82,10 @@ namespace Boothing {
             }
         }
 
-        private delegate void SwitchToPrefabAvatarDelegate(IntPtr manager, IntPtr prefab, IntPtr name, bool unk, float scale, IntPtr onSuccess, IntPtr onError);
+        private delegate void SwitchToPrefabAvatarDelegate(IntPtr @this, IntPtr prefab, IntPtr name, bool isSafe, float scale, IntPtr onSuccess, IntPtr onError);
         private static SwitchToPrefabAvatarDelegate _switchToPrefabAvatarDelegate;
 
-        private static void SwitchToBoothCat(IntPtr @this, IntPtr prefab_ptr, IntPtr name_ptr, bool unk, float scale, IntPtr onSuccess_ptr, IntPtr onError_ptr) {
+        private static void SwitchToBoothCat(IntPtr @this, IntPtr prefab_ptr, IntPtr name_ptr, bool isSafe, float scale, IntPtr onSuccess_ptr, IntPtr onError_ptr) {
             var name = IL2CPP.Il2CppStringToManaged(name_ptr);
 
             if (s_BoothCat != null && (name == "blocked" || name == "safety" || name == "performance")) {
@@ -94,7 +94,7 @@ namespace Boothing {
             }
 
             /* Invoke original function pointer. */
-            _switchToPrefabAvatarDelegate(@this, prefab_ptr, name_ptr, unk, scale, onSuccess_ptr, onError_ptr);
+            _switchToPrefabAvatarDelegate(@this, prefab_ptr, name_ptr, isSafe, scale, onSuccess_ptr, onError_ptr);
         }
     }
 }
