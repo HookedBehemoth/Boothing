@@ -14,14 +14,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System;
 using System.Collections;
 using System.Reflection;
-using System.Runtime.InteropServices;
+using System.Linq;
 using UnityEngine;
 using MelonLoader;
 using UnityEngine.Networking;
-using UnhollowerBaseLib;
+
+[assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.0.1", "Behemoth")]
+[assembly: MelonGame("VRChat", "VRChat")]
 
 namespace Boothing {
     public class BoothingMod : MelonMod {
@@ -58,6 +59,18 @@ namespace Boothing {
             MelonLogger.Msg($"bundle asset name: {prefab_path}");
             s_BoothCat = bundle.LoadAsset<GameObject>(prefab_path);
             s_BoothCat.hideFlags = HideFlags.DontUnloadUnusedAsset;
+
+            /* Replace avatar prefabs in the VRCAvatarManager... in the player prefab*/
+            while (SpawnManager.field_Private_Static_SpawnManager_0 == null)
+                yield return new WaitForSeconds(1f);
+            var prefab = SpawnManager.field_Private_Static_SpawnManager_0.field_Public_GameObject_0.transform;
+            var manager = prefab.Find("ForwardDirection").GetComponent<VRCAvatarManager>();
+            foreach (var prop in typeof(VRCAvatarManager).GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                .Where(prop => prop.Name.StartsWith("field_Public_GameObject_"))) {
+                var name = ((GameObject)prop.GetValue(manager)).name;
+                if (name == "Avatar_Utility_Base_ERROR" || name == "Avatar_Utility_Base_SAFETY" || name == "Avatar_Utility_Base_BLOCKED_PERFORMANCE")
+                    prop.SetValue(manager, s_BoothCat);
+            }
         }
 
         public override void OnApplicationStart() {
@@ -72,29 +85,6 @@ namespace Boothing {
 
             /* Load prefab */
             MelonCoroutines.Start(LoadBoothCat(path));
-
-            /* Hook avatar prefab switch function */
-            unsafe {
-                var switch_to_prefab_avatar = (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_Void_GameObject_String_Boolean_Single_Action_Action_0", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
-                var switch_to_booth_cat = new Action<IntPtr, IntPtr, IntPtr, bool, float, IntPtr, IntPtr>(SwitchToBoothCat).Method.MethodHandle.GetFunctionPointer();
-                MelonUtils.NativeHookAttach(switch_to_prefab_avatar, switch_to_booth_cat);
-                _switchToPrefabAvatarDelegate = Marshal.GetDelegateForFunctionPointer<SwitchToPrefabAvatarDelegate>(*(IntPtr*)(void*)switch_to_prefab_avatar);
-            }
-        }
-
-        private delegate void SwitchToPrefabAvatarDelegate(IntPtr @this, IntPtr prefab, IntPtr name, bool isSafe, float scale, IntPtr onSuccess, IntPtr onError);
-        private static SwitchToPrefabAvatarDelegate _switchToPrefabAvatarDelegate;
-
-        private static void SwitchToBoothCat(IntPtr @this, IntPtr prefab_ptr, IntPtr name_ptr, bool isSafe, float scale, IntPtr onSuccess_ptr, IntPtr onError_ptr) {
-            var name = IL2CPP.Il2CppStringToManaged(name_ptr);
-
-            if (s_BoothCat != null && (name == "error" || name == "safety" || name == "performance")) {
-                /* Replace robot with prefab boothcat */
-                prefab_ptr = s_BoothCat.Pointer;
-            }
-
-            /* Invoke original function pointer. */
-            _switchToPrefabAvatarDelegate(@this, prefab_ptr, name_ptr, isSafe, scale, onSuccess_ptr, onError_ptr);
         }
     }
 }
