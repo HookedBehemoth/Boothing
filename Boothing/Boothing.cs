@@ -21,7 +21,7 @@ using UnityEngine;
 using MelonLoader;
 using UnityEngine.Networking;
 
-[assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.0.1", "Behemoth")]
+[assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.0.2", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
 
 namespace Boothing {
