@@ -17,3 +17,4 @@ AssetBundlePath = "D:\\Path\\To\\boothcat.vrca"
 * Optimize the avatar you want to use (you'll see it a lot).
 * Don't name any mesh renderer "Body".
   * On performance or size blocked avatars, VRChat alters the "Tint" shader attribute on the first Material of the Renderer with that name.
+* Avatar 3.0 animators (FX, guesture, Action, locomotion) may not work as expected. Refrain from using those.
