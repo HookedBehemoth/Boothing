@@ -14,12 +14,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.Collections;
-using System.Reflection;
+using System;
 using System.Linq;
+using System.Reflection;
+using System.Collections;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
-using MelonLoader;
 using UnityEngine.Networking;
+using MelonLoader;
 
 [assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.0.2", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
@@ -27,6 +30,12 @@ using UnityEngine.Networking;
 namespace Boothing {
     public class BoothingMod : MelonMod {
         private static GameObject s_BoothCat;
+        private static string[] TargetFieldValueNames = {
+            "Avatar_Utility_Base_ERROR",
+            "Avatar_Utility_Base_SAFETY",
+            "Avatar_Utility_Base_BLOCKED_PERFORMANCE"
+        };
+        private static List<PropertyInfo> TargetFields = new(3);
 
         private static IEnumerator LoadBoothCat(string url) {
             /* Start request */
@@ -38,7 +47,7 @@ namespace Boothing {
                 yield return null;
 
             if (www.isHttpError) {
-                MelonLogger.Msg(www.error);
+                MelonLogger.Error(www.error);
                 yield break;
             }
 
@@ -52,12 +61,17 @@ namespace Boothing {
             }
 
             if (prefab_path == null) {
-                MelonLogger.Msg("Failed to find prefab in assetbundle");
+                MelonLogger.Error("Failed to find prefab in assetbundle");
                 yield break;
             }
 
             MelonLogger.Msg($"bundle asset name: {prefab_path}");
-            s_BoothCat = bundle.LoadAsset<GameObject>(prefab_path);
+            var temp = bundle.LoadAsset<GameObject>(prefab_path);
+            if (s_BoothCat != null) {
+                s_BoothCat.hideFlags = HideFlags.None;
+                GameObject.Destroy(s_BoothCat);
+            }
+            s_BoothCat = temp;
             s_BoothCat.hideFlags = HideFlags.DontUnloadUnusedAsset;
 
             /* Replace avatar prefabs in the VRCAvatarManager... in the player prefab*/
@@ -65,21 +79,80 @@ namespace Boothing {
                 yield return new WaitForSeconds(1f);
             var prefab = SpawnManager.field_Private_Static_SpawnManager_0.field_Public_GameObject_0.transform;
             var manager = prefab.Find("ForwardDirection").GetComponent<VRCAvatarManager>();
-            foreach (var prop in typeof(VRCAvatarManager).GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(prop => prop.Name.StartsWith("field_Public_GameObject_"))) {
-                var name = ((GameObject)prop.GetValue(manager)).name;
-                if (name == "Avatar_Utility_Base_ERROR" || name == "Avatar_Utility_Base_SAFETY" || name == "Avatar_Utility_Base_BLOCKED_PERFORMANCE")
+
+            /* Populate list if needed */
+            if (TargetFields.Count == 0) {
+                foreach (var prop in typeof(VRCAvatarManager).GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                    .Where(prop => prop.Name.StartsWith("field_Public_GameObject_"))) {
+                    var name = ((GameObject)prop.GetValue(manager))?.name;
+                    if (name != null && TargetFieldValueNames.Contains(name)) {
+                        TargetFields.Add(prop);
+                        prop.SetValue(manager, s_BoothCat);
+                    }
+                }
+            } else {
+                /* Replace the values */
+                foreach (var prop in TargetFields)
                     prop.SetValue(manager, s_BoothCat);
             }
+
+            /* Maybe apply to loaded players */
+            foreach (var player in VRC.PlayerManager.field_Private_Static_PlayerManager_0?.field_Private_List_1_Player_0)
+                foreach (var prop in TargetFields)
+                    prop.SetValue(player._vrcplayer.prop_VRCAvatarManager_0, s_BoothCat);
+
+            MelonLogger.Msg(ConsoleColor.Green, "Booth cat loaded");
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        private struct UniTaskStructBool {
+            [FieldOffset(0)] public IntPtr source;
+            [FieldOffset(8)] public bool result;
+            [FieldOffset(10)] public short token;
+        }
+
+        private static unsafe IntPtr SwitchToFallbackAvatarStub(IntPtr taskStorage, IntPtr managerPtr, IntPtr apiAvatarPtr, float scale) {
+            var task = (UniTaskStructBool*)taskStorage;
+            var manager = new VRCAvatarManager(managerPtr);
+            var result = manager.Method_Private_UniTask_Single_0(scale);
+            task->source = result.source.Pointer;
+            task->result = true;
+            task->token = result.token;
+            return taskStorage;
+        }
+
+        private static unsafe IntPtr SwitchToPerformanceAvatarStub(IntPtr taskStorage, IntPtr managerPtr, float scale) {
+            var task = (UniTaskStructBool*)taskStorage;
+            var manager = new VRCAvatarManager(managerPtr);
+            var result = manager.Method_Private_UniTask_Single_0(scale);
+            task->source = result.source.Pointer;
+            task->result = true;
+            task->token = result.token;
+            return taskStorage;
         }
 
         public override void OnApplicationStart() {
-            MelonPreferences.CreateCategory("Boothing");
-            var entry = MelonPreferences.CreateEntry<string>("Boothing", "AssetBundlePath", null);
-            var path = entry.GetValueAsString();
+            /* fallback -> safety */
+            unsafe {
+                var originalMethodPointer = *(IntPtr*) (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_UniTask_1_Boolean_ApiAvatar_Single_0", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+                var detourPointer = typeof(BoothingMod).GetMethod(nameof(SwitchToFallbackAvatarStub), BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
+                MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
+            }
 
-            if (path == null) {
-                MelonLogger.Msg("Boothcat AssetBundle path not set. Please set it in the Melonloader preferences under Boothing!AssetbundlePath");
+            /* performance -> safety */
+            unsafe {
+                var originalMethodPointer = *(IntPtr*) (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_UniTask_Single_1", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+                var detourPointer = typeof(BoothingMod).GetMethod(nameof(SwitchToPerformanceAvatarStub), BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
+                MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
+            }
+
+            var category = MelonPreferences.CreateCategory("Boothing");
+            var entry = category.CreateEntry<string>("AssetBundlePath", null);
+            entry.OnValueChanged += (old, value) => MelonCoroutines.Start(LoadBoothCat(value));
+            var path = entry.Value;
+
+            if (string.IsNullOrEmpty(path)) {
+                MelonLogger.Warning("Boothcat AssetBundle path not set. Please set it in the Melonloader preferences under Boothing!AssetbundlePath");
                 return;
             }
 
