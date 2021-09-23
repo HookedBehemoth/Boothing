@@ -134,7 +134,7 @@ namespace Boothing {
         public override void OnApplicationStart() {
             /* fallback -> safety */
             unsafe {
-                var originalMethodPointer = *(IntPtr*) (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_UniTask_1_Boolean_ApiAvatar_Single_0", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+                var originalMethodPointer = *(IntPtr*) (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_UniTask_1_Boolean_ApiAvatar_Single_2", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
                 var detourPointer = typeof(BoothingMod).GetMethod(nameof(SwitchToFallbackAvatarStub), BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
                 MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
             }
