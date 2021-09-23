@@ -22,9 +22,10 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Networking;
+using Cysharp.Threading.Tasks;
 using MelonLoader;
 
-[assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.1.0", "Behemoth")]
+[assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.1.2", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
 
 namespace Boothing {
@@ -114,7 +115,7 @@ namespace Boothing {
         private static unsafe IntPtr SwitchToFallbackAvatarStub(IntPtr taskStorage, IntPtr managerPtr, IntPtr apiAvatarPtr, float scale) {
             var task = (UniTaskStructBool*)taskStorage;
             var manager = new VRCAvatarManager(managerPtr);
-            var result = manager.Method_Private_UniTask_Single_0(scale);
+            var result = (UniTask)SwitchToSafetyAvatarMethod.Invoke(manager, new object[] { scale });
             task->source = result.source.Pointer;
             task->result = true;
             task->token = result.token;
@@ -124,26 +125,40 @@ namespace Boothing {
         private static unsafe IntPtr SwitchToPerformanceAvatarStub(IntPtr taskStorage, IntPtr managerPtr, float scale) {
             var task = (UniTaskStructBool*)taskStorage;
             var manager = new VRCAvatarManager(managerPtr);
-            var result = manager.Method_Private_UniTask_Single_0(scale);
+            var result = (UniTask)SwitchToSafetyAvatarMethod.Invoke(manager, new object[] { scale });
             task->source = result.source.Pointer;
             task->result = true;
             task->token = result.token;
             return taskStorage;
         }
 
-        public override void OnApplicationStart() {
-            /* fallback -> safety */
-            unsafe {
-                var originalMethodPointer = *(IntPtr*) (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_UniTask_1_Boolean_ApiAvatar_Single_2", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                var detourPointer = typeof(BoothingMod).GetMethod(nameof(SwitchToFallbackAvatarStub), BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
-                MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
-            }
+        private static MethodBase GetSwitchMethod(string target) {
+            return typeof(VRCAvatarManager)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                .Where(m => !m.Name.Contains("_PDM_"))
+                .Where(m => m.ReturnType == typeof(UniTask) || m.ReturnType == typeof(UniTask<bool>))
+                .Where(m => m.CalledMethods().Any(cm => cm?.StringReferences().Any(sr => sr == target) ?? false)).First();
+        }
 
-            /* performance -> safety */
-            unsafe {
-                var originalMethodPointer = *(IntPtr*) (IntPtr)typeof(VRCAvatarManager).GetField("NativeMethodInfoPtr_Method_Private_UniTask_Single_1", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
-                var detourPointer = typeof(BoothingMod).GetMethod(nameof(SwitchToPerformanceAvatarStub), BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
-                MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
+        private static unsafe void Hook(MethodBase target, string detour) {
+            var originalMethodPointer = *(IntPtr*) UnhollowerSupport.MethodBaseToIl2CppMethodInfoPointer(target);
+            var detourPointer = typeof(BoothingMod).GetMethod(detour, BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
+            MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
+            MelonLogger.Msg($"Hooked {target.Name} to {detour}");
+        }
+
+        private static MethodBase SwitchToSafetyAvatarMethod;
+
+        public override void OnApplicationStart() {
+            try {
+                var fallbackMethod = GetSwitchMethod("Failed to switch to FALLBACK avatar!");
+                var performanceMethod = GetSwitchMethod("Failed to switch to PERFORMANCE avatar!");
+                SwitchToSafetyAvatarMethod = GetSwitchMethod("Failed to switch to SAFETY avatar!");
+
+                Hook(fallbackMethod, nameof(SwitchToFallbackAvatarStub));
+                Hook(performanceMethod, nameof(SwitchToPerformanceAvatarStub));
+            } catch {
+                MelonLogger.Error($"Failed to resolve avatar switch methods. Look for an update for this mod.");
             }
 
             var category = MelonPreferences.CreateCategory("Boothing");
