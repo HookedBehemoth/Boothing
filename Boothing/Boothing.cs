@@ -47,7 +47,7 @@ namespace Boothing {
                 yield return null;
 
             if (www.isHttpError) {
-                MelonLogger.Error(www.error);
+                MelonLogger.Error($"Failed to load bootcat assetbundle at path \"{url}\"");
                 yield break;
             }
 
