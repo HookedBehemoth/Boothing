@@ -31,12 +31,12 @@ using MelonLoader;
 namespace Boothing {
     public class BoothingMod : MelonMod {
         private static GameObject s_BoothCat;
-        private static string[] TargetFieldValueNames = {
+        private static readonly string[] TargetFieldValueNames = {
             "Avatar_Utility_Base_ERROR",
             "Avatar_Utility_Base_SAFETY",
             "Avatar_Utility_Base_BLOCKED_PERFORMANCE"
         };
-        private static List<PropertyInfo> TargetFields = new(3);
+        private static readonly List<PropertyInfo> TargetFields = new(3);
 
         private static IEnumerator LoadBoothCat(string url) {
             /* Start request */
