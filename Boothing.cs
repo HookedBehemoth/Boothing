@@ -15,21 +15,23 @@
  */
 
 using System;
-using System.Linq;
-using System.Reflection;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
-using UnityEngine;
-using UnityEngine.Networking;
 using Cysharp.Threading.Tasks;
 using MelonLoader;
+using UnityEngine;
+using UnityEngine.Networking;
 
 [assembly: MelonInfo(typeof(Boothing.BoothingMod), "Boothing", "1.1.2", "Behemoth")]
 [assembly: MelonGame("VRChat", "VRChat")]
 
-namespace Boothing {
-    public class BoothingMod : MelonMod {
+namespace Boothing
+{
+    public class BoothingMod : MelonMod
+    {
         private static GameObject s_BoothCat;
         private static readonly string[] TargetFieldValueNames = {
             "Avatar_Utility_Base_ERROR",
@@ -38,37 +40,41 @@ namespace Boothing {
         };
         private static readonly List<PropertyInfo> TargetFields = new(3);
 
-        private static IEnumerator LoadBoothCat(string url) {
+        private IEnumerator LoadBoothCat(string url)
+        {
+            LoggerInstance.Msg("Loading booth cat from {url}");
+
             /* Start request */
             var www = UnityWebRequestAssetBundle.GetAssetBundle(url);
-            www.SendWebRequest();
+            yield return www.SendWebRequest();
 
-            /* Note: UnityWebRequestAsyncOperation is incompatible with MelonCoroutines at the moment */
-            while (!www.isDone)
-                yield return null;
-
-            if (www.isHttpError) {
-                MelonLogger.Error($"Failed to load bootcat assetbundle at path \"{url}\"");
+            if (www.isHttpError)
+            {
+                LoggerInstance.Error($"Failed to load bootcat assetbundle at path \"{url}\"");
                 yield break;
             }
 
             var bundle = DownloadHandlerAssetBundle.GetContent(www);
             string prefab_path = null;
-            foreach (var path in bundle.GetAllAssetNames()) {
-                if (path.EndsWith(".prefab")) {
+            foreach (var path in bundle.GetAllAssetNames())
+            {
+                if (path.EndsWith(".prefab"))
+                {
                     prefab_path = path;
                     break;
                 }
             }
 
-            if (prefab_path == null) {
-                MelonLogger.Error("Failed to find prefab in assetbundle");
+            if (prefab_path == null)
+            {
+                LoggerInstance.Error("Failed to find prefab in assetbundle");
                 yield break;
             }
 
-            MelonLogger.Msg($"bundle asset name: {prefab_path}");
+            LoggerInstance.Msg($"bundle asset name: {prefab_path}");
             var temp = bundle.LoadAsset<GameObject>(prefab_path);
-            if (s_BoothCat != null) {
+            if (s_BoothCat != null)
+            {
                 s_BoothCat.hideFlags = HideFlags.None;
                 GameObject.Destroy(s_BoothCat);
             }
@@ -82,16 +88,21 @@ namespace Boothing {
             var manager = prefab.Find("ForwardDirection").GetComponent<VRCAvatarManager>();
 
             /* Populate list if needed */
-            if (TargetFields.Count == 0) {
+            if (TargetFields.Count == 0)
+            {
                 foreach (var prop in typeof(VRCAvatarManager).GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                    .Where(prop => prop.Name.StartsWith("field_Public_GameObject_"))) {
+                    .Where(prop => prop.Name.StartsWith("field_Public_GameObject_")))
+                {
                     var name = ((GameObject)prop.GetValue(manager))?.name;
-                    if (name != null && TargetFieldValueNames.Contains(name)) {
+                    if (name != null && TargetFieldValueNames.Contains(name))
+                    {
                         TargetFields.Add(prop);
                         prop.SetValue(manager, s_BoothCat);
                     }
                 }
-            } else {
+            }
+            else
+            {
                 /* Replace the values */
                 foreach (var prop in TargetFields)
                     prop.SetValue(manager, s_BoothCat);
@@ -102,17 +113,19 @@ namespace Boothing {
                 foreach (var prop in TargetFields)
                     prop.SetValue(player._vrcplayer.prop_VRCAvatarManager_0, s_BoothCat);
 
-            MelonLogger.Msg(ConsoleColor.Green, "Booth cat loaded");
+            LoggerInstance.Msg(ConsoleColor.Green, "Booth cat loaded");
         }
 
         [StructLayout(LayoutKind.Explicit)]
-        private struct UniTaskStructBool {
+        private struct UniTaskStructBool
+        {
             [FieldOffset(0)] public IntPtr source;
             [FieldOffset(8)] public bool result;
             [FieldOffset(10)] public short token;
         }
 
-        private static unsafe IntPtr SwitchToFallbackAvatarStub(IntPtr taskStorage, IntPtr managerPtr, IntPtr apiAvatarPtr, float scale) {
+        private static unsafe IntPtr SwitchToFallbackAvatarStub(IntPtr taskStorage, IntPtr managerPtr, IntPtr apiAvatarPtr, float scale)
+        {
             var task = (UniTaskStructBool*)taskStorage;
             var manager = new VRCAvatarManager(managerPtr);
             var result = (UniTask)SwitchToSafetyAvatarMethod.Invoke(manager, new object[] { scale });
@@ -122,7 +135,8 @@ namespace Boothing {
             return taskStorage;
         }
 
-        private static unsafe IntPtr SwitchToPerformanceAvatarStub(IntPtr taskStorage, IntPtr managerPtr, float scale) {
+        private static unsafe IntPtr SwitchToPerformanceAvatarStub(IntPtr taskStorage, IntPtr managerPtr, float scale)
+        {
             var task = (UniTaskStructBool*)taskStorage;
             var manager = new VRCAvatarManager(managerPtr);
             var result = (UniTask)SwitchToSafetyAvatarMethod.Invoke(manager, new object[] { scale });
@@ -132,7 +146,8 @@ namespace Boothing {
             return taskStorage;
         }
 
-        private static MethodBase GetSwitchMethod(string target) {
+        private static MethodBase GetSwitchMethod(string target)
+        {
             return typeof(VRCAvatarManager)
                 .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
                 .Where(m => !m.Name.Contains("_PDM_"))
@@ -140,25 +155,30 @@ namespace Boothing {
                 .Where(m => m.CalledMethods().Any(cm => cm?.StringReferences().Any(sr => sr == target) ?? false)).First();
         }
 
-        private static unsafe void Hook(MethodBase target, string detour) {
-            var originalMethodPointer = *(IntPtr*) UnhollowerSupport.MethodBaseToIl2CppMethodInfoPointer(target);
+        private unsafe void Hook(MethodBase target, string detour)
+        {
+            var originalMethodPointer = *(IntPtr*)UnhollowerSupport.MethodBaseToIl2CppMethodInfoPointer(target);
             var detourPointer = typeof(BoothingMod).GetMethod(detour, BindingFlags.Static | BindingFlags.NonPublic).MethodHandle.GetFunctionPointer();
             MelonUtils.NativeHookAttach((IntPtr)(&originalMethodPointer), detourPointer);
-            MelonLogger.Msg($"Hooked {target.Name} to {detour}");
+            LoggerInstance.Msg($"Hooked {target.Name} to {detour}");
         }
 
         private static MethodBase SwitchToSafetyAvatarMethod;
 
-        public override void OnApplicationStart() {
-            try {
+        public override void OnApplicationStart()
+        {
+            try
+            {
                 var fallbackMethod = GetSwitchMethod("Failed to switch to FALLBACK avatar!");
                 var performanceMethod = GetSwitchMethod("Failed to switch to PERFORMANCE avatar!");
                 SwitchToSafetyAvatarMethod = GetSwitchMethod("Failed to switch to SAFETY avatar!");
 
                 Hook(fallbackMethod, nameof(SwitchToFallbackAvatarStub));
                 Hook(performanceMethod, nameof(SwitchToPerformanceAvatarStub));
-            } catch {
-                MelonLogger.Error($"Failed to resolve avatar switch methods. Look for an update for this mod.");
+            }
+            catch
+            {
+                LoggerInstance.Error($"Failed to resolve avatar switch methods. Look for an update for this mod.");
             }
 
             var category = MelonPreferences.CreateCategory("Boothing");
@@ -166,8 +186,9 @@ namespace Boothing {
             entry.OnValueChanged += (old, value) => MelonCoroutines.Start(LoadBoothCat(value));
             var path = entry.Value;
 
-            if (string.IsNullOrEmpty(path)) {
-                MelonLogger.Warning("Boothcat AssetBundle path not set. Please set it in the Melonloader preferences under Boothing!AssetbundlePath");
+            if (string.IsNullOrEmpty(path))
+            {
+                LoggerInstance.Warning("Boothcat AssetBundle path not set. Please set it in the Melonloader preferences under Boothing!AssetBundlePath");
                 return;
             }
 
