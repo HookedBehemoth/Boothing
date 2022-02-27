@@ -167,6 +167,7 @@ namespace Boothing
 
         public override void OnApplicationStart()
         {
+#if false
             try
             {
                 var fallbackMethod = GetSwitchMethod("Failed to switch to FALLBACK avatar!");
@@ -180,6 +181,7 @@ namespace Boothing
             {
                 LoggerInstance.Error($"Failed to resolve avatar switch methods. Look for an update for this mod.");
             }
+#endif
 
             var category = MelonPreferences.CreateCategory("Boothing");
             var entry = category.CreateEntry<string>("AssetBundlePath", null);
